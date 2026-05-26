@@ -35,12 +35,12 @@ export const ensureSnapshot = db.transaction((date: string) => {
 
   db.prepare(
     `INSERT OR IGNORE INTO daily_logs
-       (date, block_id, block_name, block_deadline_time,
+       (date, block_id, block_name, block_start_time, block_deadline_time,
         child_id, child_name, child_image,
         task_id, task_name, task_emoji,
         completed)
      SELECT
-        ?, b.id, b.name, b.deadline_time,
+        ?, b.id, b.name, b.start_time, b.deadline_time,
         c.id, c.name, c.image,
         t.id, t.name, t.emoji,
         0

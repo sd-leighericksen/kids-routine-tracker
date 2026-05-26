@@ -10,6 +10,7 @@ export interface ChildRow {
 export interface BlockRow {
   id: number;
   name: string;
+  start_time: string;
   deadline_time: string;
   color: string | null;
   display_order: number;

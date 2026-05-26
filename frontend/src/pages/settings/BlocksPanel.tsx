@@ -9,10 +9,18 @@ import { useToast } from '../../components/Toast';
 interface DraftState {
   id: number | null;
   name: string;
+  start_time: string;
   deadline_time: string;
 }
 
-const emptyDraft: DraftState = { id: null, name: '', deadline_time: '08:00' };
+const emptyDraft: DraftState = {
+  id: null,
+  name: '',
+  start_time: '06:00',
+  deadline_time: '08:00',
+};
+
+const TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 
 export function BlocksPanel() {
   const toast = useToast();
@@ -39,7 +47,12 @@ export function BlocksPanel() {
   };
 
   const startEdit = (b: Block) => {
-    setDraft({ id: b.id, name: b.name, deadline_time: b.deadline_time });
+    setDraft({
+      id: b.id,
+      name: b.name,
+      start_time: b.start_time,
+      deadline_time: b.deadline_time,
+    });
     setDraftError(null);
     setSheetOpen(true);
   };
@@ -49,8 +62,16 @@ export function BlocksPanel() {
       setDraftError('Name is required');
       return;
     }
-    if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(draft.deadline_time)) {
-      setDraftError('Deadline must be in HH:MM 24-hour format');
+    if (!TIME_RE.test(draft.start_time)) {
+      setDraftError('Start time must be in HH:MM 24-hour format');
+      return;
+    }
+    if (!TIME_RE.test(draft.deadline_time)) {
+      setDraftError('End time must be in HH:MM 24-hour format');
+      return;
+    }
+    if (draft.start_time >= draft.deadline_time) {
+      setDraftError('End time must be later than start time');
       return;
     }
     setSaving(true);
@@ -58,12 +79,14 @@ export function BlocksPanel() {
       if (draft.id == null) {
         await api.createBlock({
           name: draft.name.trim(),
+          start_time: draft.start_time,
           deadline_time: draft.deadline_time,
         });
         toast.show('Block added', 'success');
       } else {
         await api.updateBlock(draft.id, {
           name: draft.name.trim(),
+          start_time: draft.start_time,
           deadline_time: draft.deadline_time,
         });
         toast.show('Block updated', 'success');
@@ -116,11 +139,11 @@ export function BlocksPanel() {
               <div className="flex-1">
                 <div className="text-body-md text-ink">{b.name}</div>
                 <div className="text-caption text-slate">
-                  Deadline {b.deadline_time}
+                  {b.start_time} – {b.deadline_time}
                 </div>
               </div>
               <span className="rounded-full bg-surface px-3 py-1 text-caption-bold text-charcoal">
-                {b.deadline_time}
+                {b.start_time} → {b.deadline_time}
               </span>
               <Button variant="secondary" onClick={() => startEdit(b)}>
                 Edit
@@ -156,15 +179,26 @@ export function BlocksPanel() {
             placeholder="e.g. Morning"
             autoFocus
           />
-          <TextInput
-            label="Deadline time"
-            type="time"
-            value={draft.deadline_time}
-            onChange={(e) =>
-              setDraft((d) => ({ ...d, deadline_time: e.target.value }))
-            }
-            hint="24-hour, HH:MM"
-          />
+          <div className="grid grid-cols-2 gap-4">
+            <TextInput
+              label="Start time"
+              type="time"
+              value={draft.start_time}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, start_time: e.target.value }))
+              }
+              hint="When this block opens"
+            />
+            <TextInput
+              label="End time"
+              type="time"
+              value={draft.deadline_time}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, deadline_time: e.target.value }))
+              }
+              hint="Deadline — block locks at this time"
+            />
+          </div>
           {draftError && (
             <p className="text-caption text-brand-red-dark">{draftError}</p>
           )}
@@ -176,7 +210,7 @@ export function BlocksPanel() {
         title="Delete time block?"
         body={
           pendingDelete
-            ? `Delete ${pendingDelete.name}? Past logs keep this block's name and deadline. Current assignments in ${pendingDelete.name} are removed; future days won't include this block.`
+            ? `Delete ${pendingDelete.name}? Past logs keep this block's name, start time, and end time. Current assignments in ${pendingDelete.name} are removed; future days won't include this block.`
             : ''
         }
         confirmLabel="Delete"
@@ -197,7 +231,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <div>
         <p className="text-h5 text-ink">No time blocks yet</p>
         <p className="mt-1 text-body-sm text-slate">
-          Add a morning, afternoon, or whatever rhythm you want — each block has its own deadline.
+          Add a morning, afternoon, or whatever rhythm you want — each block has its own start and end.
         </p>
       </div>
       <Button size="lg" onClick={onAdd}>+ Add your first block</Button>

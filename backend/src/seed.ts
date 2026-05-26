@@ -16,8 +16,8 @@ if (existing.n > 0) {
 const CHILDREN = ['Alex', 'Ben', 'Cara', 'Dani', 'Ezra'] as const;
 
 const BLOCKS = [
-  { name: 'Morning', deadline_time: '08:30' },
-  { name: 'Afternoon', deadline_time: '17:30' },
+  { name: 'Morning', start_time: '06:00', deadline_time: '08:30' },
+  { name: 'Afternoon', start_time: '15:00', deadline_time: '17:30' },
 ] as const;
 
 const TASKS = [
@@ -35,7 +35,7 @@ const insertChild = db.prepare(
   'INSERT INTO children (name, display_order) VALUES (?, ?)',
 );
 const insertBlock = db.prepare(
-  'INSERT INTO blocks (name, deadline_time, display_order) VALUES (?, ?, ?)',
+  'INSERT INTO blocks (name, start_time, deadline_time, display_order) VALUES (?, ?, ?, ?)',
 );
 const insertTask = db.prepare('INSERT INTO tasks (name, emoji) VALUES (?, ?)');
 const insertAssignment = db.prepare(
@@ -51,7 +51,7 @@ const tx = db.transaction(() => {
 
   const blockIds: Record<string, number> = {};
   BLOCKS.forEach((b, idx) => {
-    const res = insertBlock.run(b.name, b.deadline_time, idx);
+    const res = insertBlock.run(b.name, b.start_time, b.deadline_time, idx);
     blockIds[b.name] = Number(res.lastInsertRowid);
   });
 

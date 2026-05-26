@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { requireParentPin } from '../auth.js';
 import { db } from '../db.js';
 import {
   ensureSnapshot,
@@ -11,6 +12,7 @@ interface DailyLogRow {
   date: string;
   block_id: number | null;
   block_name: string;
+  block_start_time: string | null;
   block_deadline_time: string;
   child_id: number | null;
   child_name: string;
@@ -28,6 +30,7 @@ type BlockState = 'active' | 'locked-complete' | 'locked-missed';
 interface BlockGrid {
   id: number;
   name: string;
+  start_time: string;
   deadline_time: string;
   state: BlockState;
   children: { id: number; name: string; image: string | null }[];
@@ -66,7 +69,7 @@ export const todayRoutes: FastifyPluginAsync = async (fastify) => {
 
       const logs = db
         .prepare(
-          `SELECT id, date, block_id, block_name, block_deadline_time,
+          `SELECT id, date, block_id, block_name, block_start_time, block_deadline_time,
                   child_id, child_name, child_image,
                   task_id, task_name, task_emoji,
                   completed, completed_at, block_outcome
@@ -93,6 +96,7 @@ export const todayRoutes: FastifyPluginAsync = async (fastify) => {
           block = {
             id: log.block_id,
             name: log.block_name,
+            start_time: log.block_start_time ?? '00:00',
             deadline_time: log.block_deadline_time,
             state: deriveBlockState(log.block_outcome),
             children: [],
@@ -140,6 +144,23 @@ export const todayRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       return { date, blocks };
+    },
+  );
+
+  // Re-apply current assignments to today's grid. Wipes today's daily_logs +
+  // daily_snapshots row so the next GET /api/today re-snapshots from the live
+  // assignments table. Today's webhook_events audit rows are preserved.
+  // Past days are never touched.
+  fastify.post(
+    '/api/today/reset',
+    { preHandler: requireParentPin },
+    async () => {
+      const date = getLocalDate();
+      db.transaction(() => {
+        db.prepare('DELETE FROM daily_logs WHERE date = ?').run(date);
+        db.prepare('DELETE FROM daily_snapshots WHERE date = ?').run(date);
+      })();
+      return { ok: true, date };
     },
   );
 };

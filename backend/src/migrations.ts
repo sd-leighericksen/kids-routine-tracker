@@ -13,6 +13,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS blocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    start_time TEXT NOT NULL DEFAULT '00:00',
     deadline_time TEXT NOT NULL,
     color TEXT,
     display_order INTEGER NOT NULL DEFAULT 0,
@@ -45,6 +46,7 @@ const SCHEMA = `
     date TEXT NOT NULL,
     block_id INTEGER REFERENCES blocks(id) ON DELETE SET NULL,
     block_name TEXT NOT NULL,
+    block_start_time TEXT,
     block_deadline_time TEXT NOT NULL,
     child_id INTEGER REFERENCES children(id) ON DELETE SET NULL,
     child_name TEXT NOT NULL,
@@ -102,6 +104,22 @@ const SCHEMA = `
     ON webhook_events (event, date, block_id);
 `;
 
+function columnExists(table: string, column: string): boolean {
+  const rows = db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all() as { name: string }[];
+  return rows.some((r) => r.name === column);
+}
+
 export function runMigrations(): void {
   db.exec(SCHEMA);
+
+  // Additive column migrations for existing DBs (CREATE TABLE IF NOT EXISTS
+  // above is a no-op when the table already exists).
+  if (!columnExists('blocks', 'start_time')) {
+    db.exec("ALTER TABLE blocks ADD COLUMN start_time TEXT NOT NULL DEFAULT '00:00'");
+  }
+  if (!columnExists('daily_logs', 'block_start_time')) {
+    db.exec('ALTER TABLE daily_logs ADD COLUMN block_start_time TEXT');
+  }
 }

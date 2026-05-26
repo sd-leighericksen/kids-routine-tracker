@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Assignment, type Block, type Child, type Task } from '../../api';
+import { Button } from '../../components/Button';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { useToast } from '../../components/Toast';
 
 interface Data {
   children: Child[];
@@ -9,10 +12,13 @@ interface Data {
 }
 
 export function AssignmentsPanel() {
+  const toast = useToast();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeBlockId, setActiveBlockId] = useState<number | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const refresh = () => {
     Promise.all([
@@ -73,6 +79,19 @@ export function AssignmentsPanel() {
 
   const activeBlock = blocks.find((b) => b.id === activeBlockId) ?? blocks[0];
 
+  const handleResetToday = async () => {
+    setConfirmReset(false);
+    setResetting(true);
+    try {
+      await api.resetToday();
+      toast.show("Today's grid rebuilt from current assignments", 'success');
+    } catch (e) {
+      toast.show((e as Error).message, 'error');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const toggle = async (childId: number, taskId: number) => {
     const key = `${activeBlock.id}:${childId}:${taskId}`;
     const existing = assignmentMap.get(key);
@@ -97,14 +116,22 @@ export function AssignmentsPanel() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-center justify-between">
+      <header className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-h3 text-ink">Assignments</h2>
-          <p className="text-body-sm text-slate">
-            Tap a cell to assign or unassign a task. Changes apply to future days
-            only.
+          <p className="max-w-2xl text-body-sm text-slate">
+            Tap a cell to assign or unassign a task. Changes here apply to
+            <strong className="font-medium"> future days</strong> — today's
+            grid was locked in when the kids first opened it this morning.
           </p>
         </div>
+        <Button
+          variant="secondary"
+          onClick={() => setConfirmReset(true)}
+          disabled={resetting}
+        >
+          {resetting ? 'Rebuilding…' : 'Re-apply to today'}
+        </Button>
       </header>
 
       <div className="flex gap-2">
@@ -199,6 +226,18 @@ export function AssignmentsPanel() {
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={confirmReset}
+        title="Re-apply assignments to today?"
+        body={
+          "This rebuilds today's grid from your current assignments. Every kid's ✕ marks for today will be cleared, and any blocks already locked for today (complete or missed) will go back to active until their deadline passes again.\n\nPast days are untouched. Future days are unaffected."
+        }
+        confirmLabel="Re-apply"
+        cancelLabel="Cancel"
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={handleResetToday}
+      />
     </div>
   );
 }

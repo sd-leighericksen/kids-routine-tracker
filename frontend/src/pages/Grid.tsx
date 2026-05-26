@@ -301,7 +301,12 @@ function BlockTabs({
             }`}
           >
             <span className="text-h5">{b.name}</span>
-            <StateChip state={b.state} deadline={b.deadline_time} inverse={selected} />
+            <StateChip
+              state={b.state}
+              start={b.start_time}
+              deadline={b.deadline_time}
+              inverse={selected}
+            />
           </button>
         );
       })}
@@ -311,10 +316,12 @@ function BlockTabs({
 
 function StateChip({
   state,
+  start,
   deadline,
   inverse,
 }: {
   state: BlockState;
+  start: string;
   deadline: string;
   inverse: boolean;
 }) {
@@ -326,7 +333,7 @@ function StateChip({
         }`}
       >
         <span className="h-2 w-2 rounded-full bg-success-accent" />
-        by {deadline}
+        {start} – {deadline}
       </span>
     );
   }

@@ -3,15 +3,16 @@ import { requireParentPin } from '../auth.js';
 import { db } from '../db.js';
 import type { BlockRow } from '../types.js';
 
-const DEADLINE_PATTERN = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
+const TIME_PATTERN = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
 
 const blockBodyCreate = {
   type: 'object',
-  required: ['name', 'deadline_time'],
+  required: ['name', 'start_time', 'deadline_time'],
   additionalProperties: false,
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 80 },
-    deadline_time: { type: 'string', pattern: DEADLINE_PATTERN },
+    start_time: { type: 'string', pattern: TIME_PATTERN },
+    deadline_time: { type: 'string', pattern: TIME_PATTERN },
     color: { type: ['string', 'null'], maxLength: 32 },
     display_order: { type: 'integer', minimum: 0 },
   },
@@ -32,6 +33,7 @@ const idParam = {
 
 interface CreateBody {
   name: string;
+  start_time: string;
   deadline_time: string;
   color?: string | null;
   display_order?: number;
@@ -39,15 +41,23 @@ interface CreateBody {
 
 interface PatchBody {
   name?: string;
+  start_time?: string;
   deadline_time?: string;
   color?: string | null;
   display_order?: number;
 }
 
+function validateWindow(start: string, end: string): string | null {
+  if (start >= end) return 'start_time must be earlier than deadline_time';
+  return null;
+}
+
 export const blocksRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/api/blocks', async () => {
     return db
-      .prepare('SELECT * FROM blocks ORDER BY display_order, deadline_time, id')
+      .prepare(
+        'SELECT * FROM blocks ORDER BY display_order, deadline_time, id',
+      )
       .all() as BlockRow[];
   });
 
@@ -67,12 +77,21 @@ export const blocksRoutes: FastifyPluginAsync = async (fastify) => {
     '/api/blocks',
     { preHandler: requireParentPin, schema: { body: blockBodyCreate } },
     async (req, reply) => {
-      const { name, deadline_time, color = null, display_order = 0 } = req.body;
+      const {
+        name,
+        start_time,
+        deadline_time,
+        color = null,
+        display_order = 0,
+      } = req.body;
+      const windowError = validateWindow(start_time, deadline_time);
+      if (windowError) return reply.code(400).send({ error: windowError });
+
       const result = db
         .prepare(
-          'INSERT INTO blocks (name, deadline_time, color, display_order) VALUES (?, ?, ?, ?)',
+          'INSERT INTO blocks (name, start_time, deadline_time, color, display_order) VALUES (?, ?, ?, ?, ?)',
         )
-        .run(name, deadline_time, color, display_order);
+        .run(name, start_time, deadline_time, color, display_order);
       const row = db
         .prepare('SELECT * FROM blocks WHERE id = ?')
         .get(result.lastInsertRowid) as BlockRow;
@@ -88,11 +107,25 @@ export const blocksRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (req, reply) => {
       const id = req.params.id;
+      const current = db
+        .prepare('SELECT start_time, deadline_time FROM blocks WHERE id = ?')
+        .get(id) as { start_time: string; deadline_time: string } | undefined;
+      if (!current) return reply.code(404).send({ error: 'Not found' });
+
+      const nextStart = req.body.start_time ?? current.start_time;
+      const nextEnd = req.body.deadline_time ?? current.deadline_time;
+      const windowError = validateWindow(nextStart, nextEnd);
+      if (windowError) return reply.code(400).send({ error: windowError });
+
       const fields: string[] = [];
       const values: unknown[] = [];
       if (req.body.name !== undefined) {
         fields.push('name = ?');
         values.push(req.body.name);
+      }
+      if (req.body.start_time !== undefined) {
+        fields.push('start_time = ?');
+        values.push(req.body.start_time);
       }
       if (req.body.deadline_time !== undefined) {
         fields.push('deadline_time = ?');
@@ -108,10 +141,9 @@ export const blocksRoutes: FastifyPluginAsync = async (fastify) => {
       }
       fields.push("updated_at = datetime('now')");
       values.push(id);
-      const result = db
-        .prepare(`UPDATE blocks SET ${fields.join(', ')} WHERE id = ?`)
-        .run(...values);
-      if (result.changes === 0) return reply.code(404).send({ error: 'Not found' });
+      db.prepare(`UPDATE blocks SET ${fields.join(', ')} WHERE id = ?`).run(
+        ...values,
+      );
       return db
         .prepare('SELECT * FROM blocks WHERE id = ?')
         .get(id) as BlockRow;

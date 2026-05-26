@@ -10,6 +10,7 @@ export interface Child {
 export interface Block {
   id: number;
   name: string;
+  start_time: string;
   deadline_time: string;
   color: string | null;
   display_order: number;
@@ -51,6 +52,7 @@ export interface GridCellLog {
 export interface GridBlock {
   id: number;
   name: string;
+  start_time: string;
   deadline_time: string;
   state: BlockState;
   children: { id: number; name: string; image: string | null }[];
@@ -173,6 +175,7 @@ export const api = {
   listBlocks: () => request<Block[]>('/api/blocks'),
   createBlock: (input: {
     name: string;
+    start_time: string;
     deadline_time: string;
     color?: string | null;
   }) =>
@@ -184,6 +187,7 @@ export const api = {
     id: number,
     patch: Partial<{
       name: string;
+      start_time: string;
       deadline_time: string;
       color: string | null;
       display_order: number;
@@ -225,6 +229,8 @@ export const api = {
 
   getToday: (date?: string) =>
     request<Today>(`/api/today${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  resetToday: () =>
+    request<{ ok: true; date: string }>('/api/today/reset', { method: 'POST' }),
   patchLog: (id: number, completed: boolean) =>
     request<GridCellLog>(`/api/logs/${id}`, {
       method: 'PATCH',
