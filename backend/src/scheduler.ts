@@ -4,6 +4,7 @@ import {
   finalizeDueBlocks,
   getLocalDate,
 } from './lifecycle.js';
+import { getLocalHHMM as getTzLocalHHMM, yesterdayOf } from './time.js';
 import {
   isApproachingDeduped,
   recordAndDeliver,
@@ -20,11 +21,7 @@ function approachingMinutes(): number {
 }
 
 function getLocalHHMM(): string {
-  return (
-    db.prepare("SELECT strftime('%H:%M', 'now', 'localtime') AS t").get() as {
-      t: string;
-    }
-  ).t;
+  return getTzLocalHHMM();
 }
 
 function addMinutesToHHMM(hhmm: string, minutes: number): string {
@@ -39,9 +36,7 @@ function addMinutesToHHMM(hhmm: string, minutes: number): string {
 }
 
 function yesterday(today: string): string {
-  return (
-    db.prepare("SELECT date(?, '-1 day') AS d").get(today) as { d: string }
-  ).d;
+  return yesterdayOf(today);
 }
 
 interface IncompleteRow {

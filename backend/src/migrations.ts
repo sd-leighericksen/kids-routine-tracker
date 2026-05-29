@@ -70,6 +70,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     pin TEXT NOT NULL DEFAULT '1234',
+    timezone TEXT NOT NULL DEFAULT 'UTC',
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -121,5 +122,20 @@ export function runMigrations(): void {
   }
   if (!columnExists('daily_logs', 'block_start_time')) {
     db.exec('ALTER TABLE daily_logs ADD COLUMN block_start_time TEXT');
+  }
+  if (!columnExists('settings', 'timezone')) {
+    db.exec(
+      "ALTER TABLE settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'",
+    );
+    // First-install best guess so the app works out of the box without the
+    // parent having to dig into settings. They can override anytime.
+    try {
+      const hostTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (hostTz) {
+        db.prepare('UPDATE settings SET timezone = ? WHERE id = 1').run(hostTz);
+      }
+    } catch {
+      // leave the UTC default in place
+    }
   }
 }

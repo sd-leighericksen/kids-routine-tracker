@@ -1,13 +1,15 @@
 import { db } from './db.js';
 import {
+  getLocalDate as getTzLocalDate,
+  getLocalHHMM as getTzLocalHHMM,
+} from './time.js';
+import {
   recordAndDeliver,
   type BlockDeadlineMissedEvent,
 } from './webhooks.js';
 
 export function getLocalDate(): string {
-  return (
-    db.prepare("SELECT date('now', 'localtime') AS d").get() as { d: string }
-  ).d;
+  return getTzLocalDate();
 }
 
 interface LocalDateTime {
@@ -16,12 +18,7 @@ interface LocalDateTime {
 }
 
 function getLocalDateTime(): LocalDateTime {
-  const row = db
-    .prepare(
-      "SELECT date('now', 'localtime') AS d, strftime('%H:%M', 'now', 'localtime') AS t",
-    )
-    .get() as { d: string; t: string };
-  return { date: row.d, time: row.t };
+  return { date: getTzLocalDate(), time: getTzLocalHHMM() };
 }
 
 // Snapshot of all current assignments into daily_logs for the date.

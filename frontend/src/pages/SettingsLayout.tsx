@@ -40,6 +40,18 @@ export function SettingsLayout() {
         </nav>
         <div className="mt-auto flex flex-col gap-1.5 border-t border-hairline-soft pt-4">
           <NavLink
+            to="general"
+            className={({ isActive }) =>
+              `rounded-full px-4 py-3 text-button-md transition-colors ${
+                isActive
+                  ? 'bg-primary text-on-primary'
+                  : 'text-ink active:bg-surface'
+              }`
+            }
+          >
+            General
+          </NavLink>
+          <NavLink
             to="pin"
             className={({ isActive }) =>
               `rounded-full px-4 py-3 text-button-md transition-colors ${

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ApiError,
@@ -8,20 +8,22 @@ import {
   type Today,
 } from '../api';
 import { Celebration } from '../components/Celebration';
+import { useServerClock } from '../useServerClock';
 
-function currentHHMM(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(
-    d.getMinutes(),
-  ).padStart(2, '0')}`;
-}
+// Polling cadence for cross-tablet sync. Short enough to feel near-live, long
+// enough that a household of tablets doesn't hammer the backend.
+const REFRESH_INTERVAL_MS = 3000;
 
-function autoSelectBlockId(blocks: GridBlock[]): number | null {
+// Minimum gap between accepted taps on the same cell. Defends against
+// rapid-fire double-taps that previously locked up the tablet — the in-flight
+// guard alone wasn't synchronous enough.
+const TAP_COOLDOWN_MS = 600;
+
+function autoSelectBlockId(blocks: GridBlock[], nowHHMM: string): number | null {
   if (blocks.length === 0) return null;
   const active = blocks.find((b) => b.state === 'active');
   if (active) return active.id;
-  const now = currentHHMM();
-  const upcoming = blocks.find((b) => b.deadline_time >= now);
+  const upcoming = blocks.find((b) => b.deadline_time >= nowHHMM);
   return (upcoming ?? blocks[blocks.length - 1]).id;
 }
 
@@ -50,22 +52,52 @@ export function Grid() {
   const [celebrationQueue, setCelebrationQueue] = useState<CelebrationEvent[]>(
     [],
   );
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(() => {
-    api
+  const clock = useServerClock();
+
+  // Synchronous guards. React state can't reliably block a second tap that
+  // fires in the same event loop tick — refs can.
+  const pendingRef = useRef<Set<number>>(new Set());
+  const lastTapAtRef = useRef<Map<number, number>>(new Map());
+
+  const load = useCallback((opts?: { showSpinner?: boolean }) => {
+    if (opts?.showSpinner) setRefreshing(true);
+    return api
       .getToday()
       .then((d) => {
         setData(d);
         setActiveBlockId((current) => {
           if (current && d.blocks.some((b) => b.id === current)) return current;
-          return autoSelectBlockId(d.blocks);
+          const nowHHMM = new Date().toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          });
+          return autoSelectBlockId(d.blocks, nowHHMM);
         });
+        setError(null);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => setError(e.message))
+      .finally(() => {
+        if (opts?.showSpinner) setRefreshing(false);
+      });
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
+  }, [load]);
+
+  // Cross-tablet sync — poll Today on a short interval while the tab is
+  // visible. Pauses while a cell is mid-flight to avoid stomping the user's
+  // optimistic UI before the patch comes back.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      if (pendingRef.current.size > 0) return;
+      void load();
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
   }, [load]);
 
   // Pre-fetch GIF pool once. Silent if not configured.
@@ -81,7 +113,7 @@ export function Grid() {
   // Tablet-wake / day-rollover refetch.
   useEffect(() => {
     const onFocus = () => {
-      if (document.visibilityState === 'visible') load();
+      if (document.visibilityState === 'visible') void load();
     };
     document.addEventListener('visibilitychange', onFocus);
     window.addEventListener('focus', onFocus);
@@ -114,7 +146,14 @@ export function Grid() {
     currentCompleted: boolean,
     childId: number,
   ) => {
-    if (pending.has(logId)) return;
+    // Synchronous guards run before any awaits or state updates so a
+    // double-tap fired in the same tick can't sneak two requests through.
+    if (pendingRef.current.has(logId)) return;
+    const last = lastTapAtRef.current.get(logId) ?? 0;
+    const now = Date.now();
+    if (now - last < TAP_COOLDOWN_MS) return;
+    lastTapAtRef.current.set(logId, now);
+    pendingRef.current.add(logId);
 
     const block =
       data?.blocks.find((b) => b.id === activeBlockId) ?? data?.blocks[0];
@@ -189,6 +228,7 @@ export function Grid() {
         setError((e as Error).message);
       }
     } finally {
+      pendingRef.current.delete(logId);
       setPending((s) => {
         const x = new Set(s);
         x.delete(logId);
@@ -228,14 +268,40 @@ export function Grid() {
           <div className="text-h4 text-ink">Routine Grid</div>
           <div className="text-caption text-slate">{formatDate(date)}</div>
         </div>
-        <Link
-          to="/settings"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-hairline text-h5 text-slate active:bg-surface"
-          aria-label="Parent settings"
-          title="Parent settings"
-        >
-          ⚙
-        </Link>
+        <div className="flex items-center gap-4">
+          <div
+            className="text-h3 tabular-nums text-ink"
+            aria-label="Current time"
+            title={clock ? `Timezone: ${clock.timezone}` : 'Syncing time…'}
+          >
+            {clock?.time ?? '—:—'}
+          </div>
+          <button
+            type="button"
+            onClick={() => void load({ showSpinner: true })}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-hairline text-h5 text-slate active:bg-surface disabled:opacity-50"
+            aria-label="Refresh"
+            title="Refresh"
+            disabled={refreshing}
+            style={{ touchAction: 'manipulation' }}
+          >
+            <span
+              aria-hidden
+              className={refreshing ? 'inline-block animate-spin' : ''}
+            >
+              ↻
+            </span>
+          </button>
+          <Link
+            to="/settings"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-hairline text-h5 text-slate active:bg-surface"
+            aria-label="Parent settings"
+            title="Parent settings"
+            style={{ touchAction: 'manipulation' }}
+          >
+            ⚙
+          </Link>
+        </div>
       </header>
 
       {error && (
@@ -294,6 +360,7 @@ function BlockTabs({
             key={b.id}
             type="button"
             onClick={() => onSelect(b.id)}
+            style={{ touchAction: 'manipulation' }}
             className={`flex items-center gap-3 rounded-full px-6 py-3 text-button-md transition-colors ${
               selected
                 ? 'bg-primary text-on-primary'
@@ -557,7 +624,9 @@ function Cell({
       type="button"
       onClick={() => onToggle(logId, completed, childId)}
       aria-pressed={completed}
+      disabled={isPending}
       className={`${cls} ${completed ? '' : 'active:bg-surface'}`}
+      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
     >
       {completed ? <CrossMark /> : null}
     </button>
