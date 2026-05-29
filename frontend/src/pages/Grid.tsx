@@ -141,6 +141,11 @@ export function Grid() {
     });
   };
 
+  // Stable identity — Celebration's effect depends on this, and a new
+  // reference each render restarts its dismiss timer, trapping the celebration
+  // on screen once polling started re-rendering Grid every few seconds.
+  const handleCelebrationDone = useCallback(() => setCelebration(null), []);
+
   const toggleCell = async (
     logId: number,
     currentCompleted: boolean,
@@ -335,7 +340,7 @@ export function Grid() {
           kidName={celebration.kidName}
           kidImage={celebration.kidImage}
           gifUrl={pickGif()}
-          onDone={() => setCelebration(null)}
+          onDone={handleCelebrationDone}
         />
       )}
     </div>

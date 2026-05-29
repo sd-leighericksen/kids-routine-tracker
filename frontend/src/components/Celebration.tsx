@@ -1,5 +1,5 @@
 import confetti from 'canvas-confetti';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface Props {
   kidName: string;
@@ -11,6 +11,12 @@ interface Props {
 const DURATION_MS = 4500;
 
 export function Celebration({ kidName, kidImage, gifUrl, onDone }: Props) {
+  // Hold the latest onDone in a ref so the dismiss-timer effect can run
+  // exactly once on mount, even if the parent re-renders and passes a fresh
+  // callback identity (which would otherwise restart the timer indefinitely).
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+
   useEffect(() => {
     const end = Date.now() + DURATION_MS - 500;
     const colors = ['#FFD02F', '#4262FF', '#F16C5F', '#5BC4BE', '#FFCDE4'];
@@ -47,12 +53,12 @@ export function Celebration({ kidName, kidImage, gifUrl, onDone }: Props) {
 
     playFanfare();
 
-    const t = window.setTimeout(onDone, DURATION_MS);
+    const t = window.setTimeout(() => onDoneRef.current(), DURATION_MS);
     return () => {
       window.clearTimeout(t);
       confetti.reset();
     };
-  }, [onDone]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-8 pointer-events-none">
