@@ -16,6 +16,7 @@ import { reportsRoutes } from './routes/reports.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { settingsRoutes } from './routes/settings.js';
 import { tasksRoutes } from './routes/tasks.js';
+import { startTimeSync, stopTimeSync } from './time.js';
 import { todayRoutes } from './routes/today.js';
 import { uploadsDir, uploadsRoutes } from './routes/uploads.js';
 
@@ -55,6 +56,7 @@ const host = process.env.HOST ?? '127.0.0.1';
 try {
   await fastify.listen({ port, host });
   fastify.log.info({ dbFilePath, uploadsDir }, 'SQLite + uploads ready');
+  startTimeSync();
   startScheduler();
   void db;
   void here;
@@ -66,6 +68,7 @@ try {
 const shutdown = async (signal: string) => {
   fastify.log.info({ signal }, 'shutting down');
   stopScheduler();
+  stopTimeSync();
   try {
     await fastify.close();
   } finally {

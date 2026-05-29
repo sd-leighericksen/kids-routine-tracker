@@ -93,6 +93,16 @@ export interface HouseholdDay {
   blocks: HouseholdDayBlock[];
 }
 
+export interface ClockStatus {
+  datetime: string;
+  timezone: string;
+  date: string;
+  time: string;
+  offset_ms: number;
+  last_sync_at: string | null;
+  last_sync_source: string | null;
+}
+
 const PIN_KEY = 'parent_pin';
 
 export function getStoredPin(): string | null {
@@ -153,6 +163,14 @@ export const api = {
     request<{ ok: true }>('/api/settings/pin', {
       method: 'PATCH',
       body: JSON.stringify({ current_pin: currentPin, new_pin: newPin }),
+    }),
+
+  getClock: () => request<ClockStatus>('/api/clock'),
+  getTimezone: () => request<{ timezone: string }>('/api/settings/timezone'),
+  setTimezone: (timezone: string) =>
+    request<{ timezone: string }>('/api/settings/timezone', {
+      method: 'PATCH',
+      body: JSON.stringify({ timezone }),
     }),
 
   listChildren: () => request<Child[]>('/api/children'),

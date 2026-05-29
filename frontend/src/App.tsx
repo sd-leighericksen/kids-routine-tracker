@@ -8,6 +8,7 @@ import { AssignmentsPanel } from './pages/settings/AssignmentsPanel';
 import { BlocksPanel } from './pages/settings/BlocksPanel';
 import { ChangePinPanel } from './pages/settings/ChangePinPanel';
 import { ChildrenPanel } from './pages/settings/ChildrenPanel';
+import { GeneralPanel } from './pages/settings/GeneralPanel';
 import { ReportsPanel } from './pages/settings/ReportsPanel';
 import { TasksPanel } from './pages/settings/TasksPanel';
 
@@ -26,6 +27,7 @@ export default function App() {
               <Route path="tasks" element={<TasksPanel />} />
               <Route path="assignments" element={<AssignmentsPanel />} />
               <Route path="reports" element={<ReportsPanel />} />
+              <Route path="general" element={<GeneralPanel />} />
               <Route path="pin" element={<ChangePinPanel />} />
             </Route>
           </Route>
