@@ -52,6 +52,18 @@ export function SettingsLayout() {
             General
           </NavLink>
           <NavLink
+            to="webhooks"
+            className={({ isActive }) =>
+              `rounded-full px-4 py-3 text-button-md transition-colors ${
+                isActive
+                  ? 'bg-primary text-on-primary'
+                  : 'text-ink active:bg-surface'
+              }`
+            }
+          >
+            Webhooks
+          </NavLink>
+          <NavLink
             to="pin"
             className={({ isActive }) =>
               `rounded-full px-4 py-3 text-button-md transition-colors ${

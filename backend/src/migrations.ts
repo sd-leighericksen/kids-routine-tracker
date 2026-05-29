@@ -123,6 +123,9 @@ export function runMigrations(): void {
   if (!columnExists('daily_logs', 'block_start_time')) {
     db.exec('ALTER TABLE daily_logs ADD COLUMN block_start_time TEXT');
   }
+  if (!columnExists('settings', 'webhook_urls')) {
+    db.exec('ALTER TABLE settings ADD COLUMN webhook_urls TEXT');
+  }
   if (!columnExists('settings', 'timezone')) {
     db.exec(
       "ALTER TABLE settings ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'",

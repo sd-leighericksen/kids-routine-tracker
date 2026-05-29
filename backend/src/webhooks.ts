@@ -51,18 +51,67 @@ export interface BlockDeadlineMissedEvent extends BaseEvent {
   missed: { child: ChildRef; task: TaskRef }[];
 }
 
+export interface WebhookTestEvent extends BaseEvent {
+  type: 'webhook.test';
+  message: string;
+}
+
 export type WebhookEvent =
   | TaskCompletedEvent
   | ChildAllCompleteEvent
   | BlockDeadlineApproachingEvent
-  | BlockDeadlineMissedEvent;
+  | BlockDeadlineMissedEvent
+  | WebhookTestEvent;
 
-function getTargets(): string[] {
-  const raw = process.env.WEBHOOK_URL ?? '';
-  return raw
-    .split(',')
+interface SettingsRow {
+  webhook_urls: string | null;
+}
+
+export function getStoredWebhookUrls(): string[] {
+  const row = db
+    .prepare('SELECT webhook_urls FROM settings WHERE id = 1')
+    .get() as SettingsRow | undefined;
+  return parseUrlList(row?.webhook_urls ?? null);
+}
+
+export function setStoredWebhookUrls(urls: string[]): string[] {
+  const cleaned = urls
     .map((u) => u.trim())
     .filter((u) => u.length > 0);
+  for (const u of cleaned) {
+    if (!isValidWebhookUrl(u)) {
+      throw new Error(`Invalid webhook URL: ${u}`);
+    }
+  }
+  db.prepare(
+    "UPDATE settings SET webhook_urls = ?, updated_at = datetime('now') WHERE id = 1",
+  ).run(cleaned.length === 0 ? null : cleaned.join('\n'));
+  return cleaned;
+}
+
+export function isValidWebhookUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function parseUrlList(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(/[\n,]/)
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0);
+}
+
+function getTargets(): string[] {
+  const fromDb = getStoredWebhookUrls();
+  const fromEnv = parseUrlList(process.env.WEBHOOK_URL ?? null);
+  // De-dup while preserving order — DB entries first so the UI is the source
+  // of truth and an env var added long ago can't silently double-fire.
+  return Array.from(new Set([...fromDb, ...fromEnv]));
 }
 
 export function isApproachingDeduped(
@@ -118,6 +167,70 @@ export function recordAndDeliver(event: WebhookEvent): void {
   for (const url of targets) {
     void deliver(eventId, url, event);
   }
+}
+
+export interface RecentWebhookEvent {
+  id: number;
+  event: string;
+  created_at: string;
+  delivered: boolean;
+  attempts: number;
+  last_error: string | null;
+  delivered_at: string | null;
+}
+
+export function getRecentWebhookEvents(limit = 20): RecentWebhookEvent[] {
+  const rows = db
+    .prepare(
+      `SELECT id, event, created_at, delivered, attempts, last_error, delivered_at
+       FROM webhook_events
+       ORDER BY id DESC
+       LIMIT ?`,
+    )
+    .all(limit) as {
+    id: number;
+    event: string;
+    created_at: string;
+    delivered: number;
+    attempts: number;
+    last_error: string | null;
+    delivered_at: string | null;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    event: r.event,
+    created_at: r.created_at,
+    delivered: !!r.delivered,
+    attempts: r.attempts,
+    last_error: r.last_error,
+    delivered_at: r.delivered_at,
+  }));
+}
+
+export function sendTestEvent(): {
+  delivered_to: number;
+  event_id: number | null;
+} {
+  const targets = getTargets();
+  const event: WebhookTestEvent = {
+    type: 'webhook.test',
+    timestamp: new Date().toISOString(),
+    date: new Date().toISOString().slice(0, 10),
+    message:
+      'Test ping from the kids routine tracker. If you can read this, your webhook is wired up correctly.',
+  };
+  // recordAndDeliver also fires-and-forgets the HTTP POST per target.
+  const beforeId = db
+    .prepare('SELECT MAX(id) AS m FROM webhook_events')
+    .get() as { m: number | null };
+  recordAndDeliver(event);
+  const afterId = db
+    .prepare('SELECT MAX(id) AS m FROM webhook_events')
+    .get() as { m: number | null };
+  return {
+    delivered_to: targets.length,
+    event_id: afterId.m && afterId.m !== beforeId.m ? afterId.m : null,
+  };
 }
 
 async function deliver(

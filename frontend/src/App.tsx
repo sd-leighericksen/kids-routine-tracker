@@ -11,6 +11,7 @@ import { ChildrenPanel } from './pages/settings/ChildrenPanel';
 import { GeneralPanel } from './pages/settings/GeneralPanel';
 import { ReportsPanel } from './pages/settings/ReportsPanel';
 import { TasksPanel } from './pages/settings/TasksPanel';
+import { WebhooksPanel } from './pages/settings/WebhooksPanel';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
               <Route path="assignments" element={<AssignmentsPanel />} />
               <Route path="reports" element={<ReportsPanel />} />
               <Route path="general" element={<GeneralPanel />} />
+              <Route path="webhooks" element={<WebhooksPanel />} />
               <Route path="pin" element={<ChangePinPanel />} />
             </Route>
           </Route>

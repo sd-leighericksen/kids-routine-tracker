@@ -103,6 +103,22 @@ export interface ClockStatus {
   last_sync_source: string | null;
 }
 
+export interface RecentWebhookEvent {
+  id: number;
+  event: string;
+  created_at: string;
+  delivered: boolean;
+  attempts: number;
+  last_error: string | null;
+  delivered_at: string | null;
+}
+
+export interface WebhookSettings {
+  urls: string[];
+  env_urls: string[];
+  recent: RecentWebhookEvent[];
+}
+
 const PIN_KEY = 'parent_pin';
 
 export function getStoredPin(): string | null {
@@ -172,6 +188,18 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ timezone }),
     }),
+
+  getWebhooks: () => request<WebhookSettings>('/api/settings/webhooks'),
+  setWebhooks: (urls: string[]) =>
+    request<{ urls: string[] }>('/api/settings/webhooks', {
+      method: 'PATCH',
+      body: JSON.stringify({ urls }),
+    }),
+  testWebhooks: () =>
+    request<{ delivered_to: number; event_id: number | null }>(
+      '/api/settings/webhooks/test',
+      { method: 'POST' },
+    ),
 
   listChildren: () => request<Child[]>('/api/children'),
   createChild: (input: { name: string; image?: string | null }) =>

@@ -7,6 +7,13 @@ import {
   setStoredTimezone,
   syncTime,
 } from '../time.js';
+import {
+  getRecentWebhookEvents,
+  getStoredWebhookUrls,
+  isValidWebhookUrl,
+  sendTestEvent,
+  setStoredWebhookUrls,
+} from '../webhooks.js';
 
 const changePinBody = {
   type: 'object',
@@ -34,6 +41,23 @@ const timezoneBody = {
 
 interface TimezoneBody {
   timezone: string;
+}
+
+const webhookUrlsBody = {
+  type: 'object',
+  required: ['urls'],
+  additionalProperties: false,
+  properties: {
+    urls: {
+      type: 'array',
+      maxItems: 10,
+      items: { type: 'string', minLength: 1, maxLength: 2048 },
+    },
+  },
+} as const;
+
+interface WebhookUrlsBody {
+  urls: string[];
 }
 
 export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -69,4 +93,50 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       return { timezone: getStoredTimezone() };
     },
   );
+
+  // Webhook configuration — PIN-gated. The settings page calls the GET form,
+  // so we keep response payloads small.
+  fastify.get(
+    '/api/settings/webhooks',
+    { preHandler: requireParentPin },
+    async () => ({
+      urls: getStoredWebhookUrls(),
+      env_urls: parseEnvUrls(),
+      recent: getRecentWebhookEvents(20),
+    }),
+  );
+
+  fastify.patch<{ Body: WebhookUrlsBody }>(
+    '/api/settings/webhooks',
+    { preHandler: requireParentPin, schema: { body: webhookUrlsBody } },
+    async (req, reply) => {
+      for (const u of req.body.urls) {
+        if (!isValidWebhookUrl(u)) {
+          return reply
+            .code(400)
+            .send({ error: `Invalid webhook URL: ${u}` });
+        }
+      }
+      try {
+        const saved = setStoredWebhookUrls(req.body.urls);
+        return { urls: saved };
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+    },
+  );
+
+  fastify.post(
+    '/api/settings/webhooks/test',
+    { preHandler: requireParentPin },
+    async () => sendTestEvent(),
+  );
 };
+
+function parseEnvUrls(): string[] {
+  const raw = process.env.WEBHOOK_URL ?? '';
+  return raw
+    .split(/[\n,]/)
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0);
+}
