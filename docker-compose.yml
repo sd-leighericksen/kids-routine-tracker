@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: kids-routine-backend:latest
+    container_name: kids-routine-backend
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+    env_file:
+      - backend/.env
+    volumes:
+      - ./backend/data:/app/backend/data
+    expose:
+      - "3001"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: kids-routine-frontend:latest
+    container_name: kids-routine-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
